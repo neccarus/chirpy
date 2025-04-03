@@ -4,4 +4,8 @@ VALUES (gen_random_uuid(), NOW(), NOW(), $1, $2)
 RETURNING *;
 
 -- name: GetChirps :many
-SELECT * FROM CHIRPS;
+SELECT * FROM chirps;
+
+-- name: GetChirp :one
+SELECT * FROM chirps
+WHERE id = $1;

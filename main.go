@@ -103,16 +103,8 @@ func (cfg *apiConfig) CreateUser(writer http.ResponseWriter, request *http.Reque
 
 func (cfg *apiConfig) CreateChirp(writer http.ResponseWriter, request *http.Request) {
 
-	type Chirp struct {
-		ID        uuid.UUID `json:"id"`
-		CreatedAt time.Time `json:"created_at"`
-		UpdatedAt time.Time `json:"updated_at"`
-		Body      string    `json:"body"`
-		UserID    uuid.UUID `json:"user_id"`
-	}
-
 	type ResponseBody struct {
-		Chirp
+		database.Chirp
 		Error string `json:"error"`
 	}
 
@@ -152,7 +144,7 @@ func (cfg *apiConfig) CreateChirp(writer http.ResponseWriter, request *http.Requ
 		log.Printf("Error creating chirp: %s", err)
 	}
 	responseBody := ResponseBody{
-		Chirp: Chirp{ID: chirp.ID,
+		Chirp: database.Chirp{ID: chirp.ID,
 			CreatedAt: chirp.CreatedAt,
 			UpdatedAt: chirp.UpdatedAt,
 			Body:      chirp.Body,
@@ -174,15 +166,7 @@ func (cfg *apiConfig) CreateChirp(writer http.ResponseWriter, request *http.Requ
 
 func (cfg *apiConfig) GetChirps(writer http.ResponseWriter, request *http.Request) {
 
-	type Chirp struct {
-		ID        uuid.UUID `json:"id"`
-		CreatedAt time.Time `json:"created_at"`
-		UpdatedAt time.Time `json:"updated_at"`
-		Body      string    `json:"body"`
-		UserID    uuid.UUID `json:"user_id"`
-	}
-
-	var ResponseBody []Chirp
+	var ResponseBody []database.Chirp
 
 	context := request.Context()
 	chirps, err := cfg.dbQueries.GetChirps(context)
@@ -192,13 +176,44 @@ func (cfg *apiConfig) GetChirps(writer http.ResponseWriter, request *http.Reques
 	}
 
 	for _, chirp := range chirps {
-		ResponseBody = append(ResponseBody, Chirp{
+		ResponseBody = append(ResponseBody, database.Chirp{
 			ID:        chirp.ID,
 			CreatedAt: chirp.CreatedAt,
 			UpdatedAt: chirp.UpdatedAt,
 			Body:      chirp.Body,
 			UserID:    chirp.UserID,
 		})
+	}
+
+	data, err := json.Marshal(ResponseBody)
+	if err != nil {
+		log.Printf("Error marshalling JSON: %s", err)
+		writer.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	writer.Header().Add("Content-Type", "application/json")
+	writer.WriteHeader(http.StatusOK)
+	writer.Write(data)
+}
+
+func (cfg *apiConfig) GetChirp(writer http.ResponseWriter, request *http.Request) {
+
+	var ResponseBody database.Chirp
+
+	context := request.Context()
+	chirpID, err := uuid.Parse(request.PathValue("chirpID"))
+	if err != nil {
+		log.Printf("Error parsing chirpID: %s", err)
+		writer.WriteHeader(http.StatusNotFound)
+		return
+	}
+	chirp, err := cfg.dbQueries.GetChirp(context, chirpID)
+	ResponseBody = chirp
+	if err != nil {
+		log.Printf("Error retrieving chirp: %s", err)
+		writer.WriteHeader(http.StatusNotFound)
+		return
 	}
 
 	data, err := json.Marshal(ResponseBody)
@@ -240,6 +255,7 @@ func main() {
 	serveMux.HandleFunc("POST /api/users", apiCfg.CreateUser)
 	serveMux.HandleFunc("POST /api/chirps", apiCfg.CreateChirp)
 	serveMux.HandleFunc("GET /api/chirps", apiCfg.GetChirps)
+	serveMux.HandleFunc("GET /api/chirps/{chirpID}", apiCfg.GetChirp)
 
 	err = server.ListenAndServe()
 	if err != nil {
